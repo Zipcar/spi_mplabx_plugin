@@ -1,0 +1,7 @@
+## YAML Template.
+---
+spiNum: SPI4 ## SPI Name (eg: SPI1, SPI2, etc...)
+spiBuff: SPI4BUF ## Respective SPIBUFF SFR
+spiStat: SPI4STAT
+requestFile: /Users/cgoldader/pic-brain/LMBrain.X/sim/spireq ## Request File Path (eg: "~/spifolder/req"
+responseFile: /Users/cgoldader/pic-brain/LMBrain.X/sim/spires ## Response File Path (eg: "~/spifolder/res"
