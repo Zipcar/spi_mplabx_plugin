@@ -16,6 +16,8 @@ import java.io.IOException;
 import org.openide.util.lookup.ServiceProvider;
 import java.util.Map;
 import org.yaml.snakeyaml.Yaml;
+import org.zeromq.ZMQ;
+import org.zeromq.ZContext;
 
 @ServiceProvider(path = Peripheral.REGISTRATION_PATH, service = Peripheral.class)
 public class Spi implements Peripheral {
@@ -163,17 +165,17 @@ public class Spi implements Peripheral {
     public void output() {
         try {
             lastRead = sfrBuff.read();
-            request.write((byte) lastRead);
             if (sendFlag) {
                 sendFlag = false;
             } else {
                 messageHandler.outputMessage(String.format("Reading from SPI: 0x%02X", lastRead));
+                request.write((byte) lastRead);
                 sfrStat.privilegedSetFieldValue("SPIRBF", 1);
             }
             if (!bytes.isEmpty()) { // Inject anything in chars
                 if (lastRead == 85) { // If the buffer is ready to recieve (sent a x55 byte) !! IMPORTANT
                     sendFlag = true;
-                    // messageHandler.outputMessage(String.format("Injecting: 0x%02X ", bytes.peek())); // Returns the next char which will be injected
+                    messageHandler.outputMessage(String.format("Injecting: 0x%02X ", bytes.peek())); // Returns the next char which will be injected
                     lastSent = bytes.pop();
                     sfrBuff.privilegedWrite(lastSent); // Inject the next char
                 }
