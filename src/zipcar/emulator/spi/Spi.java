@@ -155,12 +155,12 @@ public class Spi implements Peripheral {
     // Try to write bytes to the request file
     public void output() {
         try {
-            // request.write((byte) sfrTX.read());
             lastRead = sfrBuff.read();
+            request.write((byte) lastRead);
             if (sendFlag) {
                 sendFlag = false;
             } else {
-                // messageHandler.outputMessage(String.format("Reading from SPI: 0x%02X", lastRead));
+                messageHandler.outputMessage(String.format("Reading from SPI: 0x%02X", lastRead));
                 sfrStat.privilegedSetFieldValue("SPIRBF", 1);
             }
             if (!bytes.isEmpty()) { // Inject anything in chars
