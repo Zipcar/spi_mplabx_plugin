@@ -21,31 +21,37 @@ import org.yaml.snakeyaml.Yaml;
 public class Spi implements Peripheral {
 
     String SPI_NUM; // SPI Name (eg: SPI1, SPI2, etc...)
-    String SPI_BUFF;// Respective SPI BUFFER SFR
-    String SPI_STAT;
+    String SPI_BUFF; // Respective SPI BUFFER SFR
+    String SPI_STAT; // SPI STAT buffer
     String REQUEST_FILE; // Request File Path (eg: "~/uartfolder/req"
     String RESPONSE_FILE; // Response File Path (eg: "~/uartfolder/res"
 
     static Spi instance;
+    SimulatorDataStore DS;
     MessageHandler messageHandler;
+    SCL scl;
+
     SFR sfrBuff;
     SFR sfrStat;
     SFR sfrTX;
     SFRSet sfrs;
-    int updateCounter = 0;
-    int cycleCount = 0;
-    SCL scl;
-    boolean notInitialized = true;
-    long lastRead;
-    long lastSent;
+
     LinkedList<Byte> bytes = new LinkedList<Byte>();
     FileOutputStream request;
     FileInputStream response;
     Yaml yaml = new Yaml();
+
+    int updateCounter = 0;
+    int cycleCount = 0;
+    boolean notInitialized = true;
+    long lastRead;
+    long lastSent;
     boolean sendFlag = false;
     
     @Override
     public boolean init(SimulatorDataStore DS) {
+        // Initialize DS
+        this.DS = DS;
 
         // Initialize messageHandler
         messageHandler = DS.getMessageHandler();
@@ -101,6 +107,7 @@ public class Spi implements Peripheral {
         try {
             request.close();
             response.close();
+            DS.getPeripheralSet().removePeripheral(this);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -130,7 +137,7 @@ public class Spi implements Peripheral {
     public void update() {
         if (cycleCount % (267) == 0) {
             try {
-                if (response.available() >= 2) { // If there are unread bytes, read them and add the chars
+                if (response.available() >= 2) { // If there are unread bytes, read them and add to bytes array
                     String tempStr = "";
                     tempStr += (char) response.read();
                     tempStr += (char) response.read();
