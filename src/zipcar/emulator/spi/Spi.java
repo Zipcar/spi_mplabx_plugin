@@ -10,14 +10,13 @@ import com.microchip.mplab.mdbcore.simulator.PeripheralSet;
 import java.io.File;
 import java.util.LinkedList;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintWriter;
+import java.net.Socket;
 import org.openide.util.lookup.ServiceProvider;
 import java.util.Map;
 import org.yaml.snakeyaml.Yaml;
-import org.zeromq.ZMQ;
-import org.zeromq.ZContext;
 
 @ServiceProvider(path = Peripheral.REGISTRATION_PATH, service = Peripheral.class)
 public class Spi implements Peripheral {
@@ -39,8 +38,8 @@ public class Spi implements Peripheral {
     SFRSet sfrs;
 
     LinkedList<Byte> bytes = new LinkedList<Byte>();
-    FileOutputStream request;
-    FileInputStream response;
+    PrintWriter request;
+    InputStream response;
     Yaml yaml = new Yaml();
 
     int updateCounter = 0;
@@ -49,6 +48,7 @@ public class Spi implements Peripheral {
     long lastRead;
     long lastSent;
     boolean sendFlag = false;
+    String tempStr = "";
     
     @Override
     public boolean init(SimulatorDataStore DS) {
@@ -84,13 +84,23 @@ public class Spi implements Peripheral {
         }
 
         // Setup pipes
-        try {
+        /* try {
             request = new FileOutputStream(REQUEST_FILE);
             response = new FileInputStream(RESPONSE_FILE);
         } catch (FileNotFoundException e) {
             messageHandler.outputMessage("Exception in init: " + e);
             return false;
-        }
+        } */
+        
+        // Setup Sockets
+        try {
+            Socket reqSocket = new Socket("localhost", 5555);
+            Socket resSocket = new Socket("localhost", 5556);
+            request = new PrintWriter(reqSocket.getOutputStream());
+            response = resSocket.getInputStream();
+        } catch (Exception e) {
+            messageHandler.outputError(e);
+        } 
 
         // Add observers
         SpiObserver obs = new SpiObserver();
@@ -137,18 +147,18 @@ public class Spi implements Peripheral {
 
     @Override
     public void update() {
-        if (cycleCount % (267) == 0) {
-            try {
-                if (response.available() >= 2) { // If there are unread bytes, read them and add to bytes array
-                    String tempStr = "";
-                    tempStr += (char) response.read();
-                    tempStr += (char) response.read();
-                    bytes.add((byte) Integer.parseInt(tempStr, 16));
+        try {
+            if (sendFlag) {
+                byte b = (byte) response.read();
+                if ((int) b == -1) {
+                    messageHandler.outputMessage("End of Stream");
+                } else {
+                    bytes.add(b);
                 }
-            } catch (IOException e) {
-                messageHandler.outputMessage("Exception reading character from res " + e);
-                return;
             }
+        } catch (IOException e) {
+            messageHandler.outputMessage("Exception reading character from res " + e);
+            return;
         }
         cycleCount++;
     }
@@ -170,11 +180,11 @@ public class Spi implements Peripheral {
             } else {
                 messageHandler.outputMessage(String.format("Reading from SPI: 0x%02X", lastRead));
                 request.write((byte) lastRead);
+                sendFlag = true;
                 sfrStat.privilegedSetFieldValue("SPIRBF", 1);
             }
             if (!bytes.isEmpty()) { // Inject anything in chars
                 if (lastRead == 85) { // If the buffer is ready to recieve (sent a x55 byte) !! IMPORTANT
-                    sendFlag = true;
                     messageHandler.outputMessage(String.format("Injecting: 0x%02X ", bytes.peek())); // Returns the next char which will be injected
                     lastSent = bytes.pop();
                     sfrBuff.privilegedWrite(lastSent); // Inject the next char
