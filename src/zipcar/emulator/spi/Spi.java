@@ -53,6 +53,8 @@ public class Spi implements Peripheral {
     long lastRead;
     long lastSent;
     boolean sendFlag = false;
+    boolean injectedFlag = false;
+    boolean systemBooted = false;
     String tempStr = "";
     
     @Override
@@ -151,8 +153,13 @@ public class Spi implements Peripheral {
 
     @Override
     public void update() {
+        if (cycleCount > 100000) {
+            systemBooted = true;
+        }
         try {
             if (sendFlag) {
+                injectedFlag = true;
+                sendFlag = false;
                 long readByte = response.read();
                 byte b = (byte) readByte;
                 if ((int) b == -1) {
@@ -160,8 +167,8 @@ public class Spi implements Peripheral {
                     System.exit(0);
                 } else {
                     messageHandler.outputMessage(String.format("Injecting: 0x%02X ", b)); // Returns the next char which will be injected
-                    sfrBuff.privilegedWrite(lastSent); // Inject the next char
-                    sendFlag = false;
+                    sfrBuff.privilegedWrite(b); // Inject the next char
+                    sfrStat.privilegedSetFieldValue("SPIRBF", 1);
                 }
             }
         } catch (IOException e) {
@@ -181,14 +188,17 @@ public class Spi implements Peripheral {
 
     // Try to write bytes to the request file
     public void output() {
-        if (cycleCount > 10000) {
+        if (systemBooted) {
             try {
-                lastRead = sfrBuff.read();
-                messageHandler.outputMessage(String.format("Reading from SPI: 0x%02X", lastRead));
-                request.write((byte) lastRead);
-                request.flush();
-                sendFlag = true;
-                sfrStat.privilegedSetFieldValue("SPIRBF", 1);
+                if (injectedFlag) {
+                    injectedFlag = false;
+                } else {
+                    lastRead = sfrBuff.read();
+                    messageHandler.outputMessage(String.format("Reading from SPI: 0x%02X", lastRead));
+                    request.write((byte) lastRead);
+                    request.flush();
+                    sendFlag = true;
+                }
             } catch (Exception e) {
                 messageHandler.outputMessage("Failed to write request byte: " + e);
             }
