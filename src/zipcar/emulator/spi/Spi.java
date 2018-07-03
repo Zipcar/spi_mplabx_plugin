@@ -7,11 +7,15 @@ import com.microchip.mplab.mdbcore.simulator.scl.SCL;
 import com.microchip.mplab.mdbcore.simulator.MessageHandler;
 import com.microchip.mplab.mdbcore.simulator.SimulatorDataStore.SimulatorDataStore;
 import com.microchip.mplab.mdbcore.simulator.PeripheralSet;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.util.LinkedList;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.Socket;
 import org.openide.util.lookup.ServiceProvider;
@@ -38,8 +42,8 @@ public class Spi implements Peripheral {
     SFRSet sfrs;
 
     LinkedList<Byte> bytes = new LinkedList<Byte>();
-    PrintWriter request;
-    InputStream response;
+    BufferedWriter request;
+    BufferedReader response;
     Yaml yaml = new Yaml();
 
     int updateCounter = 0;
@@ -95,9 +99,8 @@ public class Spi implements Peripheral {
         // Setup Sockets
         try {
             Socket reqSocket = new Socket("localhost", 5555);
-            Socket resSocket = new Socket("localhost", 5556);
-            request = new PrintWriter(reqSocket.getOutputStream());
-            response = resSocket.getInputStream();
+            request = new BufferedWriter(new OutputStreamWriter(reqSocket.getOutputStream()));
+            response = new BufferedReader(new InputStreamReader(reqSocket.getInputStream()));
         } catch (Exception e) {
             messageHandler.outputError(e);
         } 
@@ -149,11 +152,20 @@ public class Spi implements Peripheral {
     public void update() {
         try {
             if (sendFlag) {
+                messageHandler.outputMessage("Stuck in sendflag");
                 byte b = (byte) response.read();
+                messageHandler.outputMessage(Byte.toString(b));
                 if ((int) b == -1) {
                     messageHandler.outputMessage("End of Stream");
+                    System.exit(0);
                 } else {
                     bytes.add(b);
+                }
+                if (!bytes.isEmpty()) { // Inject anything in chars
+                    sendFlag = false;
+                    messageHandler.outputMessage(String.format("Injecting: 0x%02X ", bytes.peek())); // Returns the next char which will be injected
+                    lastSent = bytes.pop();
+                    sfrBuff.privilegedWrite(lastSent); // Inject the next char
                 }
             }
         } catch (IOException e) {
@@ -173,25 +185,25 @@ public class Spi implements Peripheral {
 
     // Try to write bytes to the request file
     public void output() {
-        try {
-            lastRead = sfrBuff.read();
-            if (sendFlag) {
-                sendFlag = false;
-            } else {
-                messageHandler.outputMessage(String.format("Reading from SPI: 0x%02X", lastRead));
-                request.write((byte) lastRead);
-                sendFlag = true;
-                sfrStat.privilegedSetFieldValue("SPIRBF", 1);
-            }
-            if (!bytes.isEmpty()) { // Inject anything in chars
-                if (lastRead == 85) { // If the buffer is ready to recieve (sent a x55 byte) !! IMPORTANT
-                    messageHandler.outputMessage(String.format("Injecting: 0x%02X ", bytes.peek())); // Returns the next char which will be injected
-                    lastSent = bytes.pop();
-                    sfrBuff.privilegedWrite(lastSent); // Inject the next char
+        if (cycleCount > 10000) {
+            try {
+                lastRead = sfrBuff.read();
+                if (sendFlag) {
+                    sendFlag = false;
+                } else {
+                    messageHandler.outputMessage(String.format("Reading from SPI: 0x%02X", lastRead));
+                    try {
+                        request.write((byte) lastRead);
+                        request.flush();
+                    } catch (Exception e) {
+                        messageHandler.outputMessage(e.toString());
+                    }
+                    sendFlag = true;
+                    sfrStat.privilegedSetFieldValue("SPIRBF", 1);
                 }
+            } catch (Exception e) {
+                messageHandler.outputMessage("Failed to write request byte: " + e);
             }
-        } catch (Exception e) {
-            messageHandler.outputMessage("Failed to write request byte: " + e);
         }
     }
 
