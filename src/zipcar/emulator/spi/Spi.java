@@ -7,6 +7,7 @@ import com.microchip.mplab.mdbcore.simulator.scl.SCL;
 import com.microchip.mplab.mdbcore.simulator.MessageHandler;
 import com.microchip.mplab.mdbcore.simulator.SimulatorDataStore.SimulatorDataStore;
 import com.microchip.mplab.mdbcore.simulator.PeripheralSet;
+import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -43,7 +44,7 @@ public class Spi implements Peripheral {
 
     LinkedList<Byte> bytes = new LinkedList<Byte>();
     BufferedWriter request;
-    BufferedReader response;
+    BufferedInputStream response;
     Yaml yaml = new Yaml();
 
     int updateCounter = 0;
@@ -100,7 +101,7 @@ public class Spi implements Peripheral {
         try {
             Socket reqSocket = new Socket("localhost", 5555);
             request = new BufferedWriter(new OutputStreamWriter(reqSocket.getOutputStream()));
-            response = new BufferedReader(new InputStreamReader(reqSocket.getInputStream()));
+            response = new BufferedInputStream(reqSocket.getInputStream());
         } catch (Exception e) {
             messageHandler.outputError(e);
         } 
@@ -152,20 +153,15 @@ public class Spi implements Peripheral {
     public void update() {
         try {
             if (sendFlag) {
-                messageHandler.outputMessage("Stuck in sendflag");
-                byte b = (byte) response.read();
-                messageHandler.outputMessage(Byte.toString(b));
+                long readByte = response.read();
+                byte b = (byte) readByte;
                 if ((int) b == -1) {
                     messageHandler.outputMessage("End of Stream");
                     System.exit(0);
                 } else {
-                    bytes.add(b);
-                }
-                if (!bytes.isEmpty()) { // Inject anything in chars
-                    sendFlag = false;
-                    messageHandler.outputMessage(String.format("Injecting: 0x%02X ", bytes.peek())); // Returns the next char which will be injected
-                    lastSent = bytes.pop();
+                    messageHandler.outputMessage(String.format("Injecting: 0x%02X ", b)); // Returns the next char which will be injected
                     sfrBuff.privilegedWrite(lastSent); // Inject the next char
+                    sendFlag = false;
                 }
             }
         } catch (IOException e) {
@@ -188,19 +184,11 @@ public class Spi implements Peripheral {
         if (cycleCount > 10000) {
             try {
                 lastRead = sfrBuff.read();
-                if (sendFlag) {
-                    sendFlag = false;
-                } else {
-                    messageHandler.outputMessage(String.format("Reading from SPI: 0x%02X", lastRead));
-                    try {
-                        request.write((byte) lastRead);
-                        request.flush();
-                    } catch (Exception e) {
-                        messageHandler.outputMessage(e.toString());
-                    }
-                    sendFlag = true;
-                    sfrStat.privilegedSetFieldValue("SPIRBF", 1);
-                }
+                messageHandler.outputMessage(String.format("Reading from SPI: 0x%02X", lastRead));
+                request.write((byte) lastRead);
+                request.flush();
+                sendFlag = true;
+                sfrStat.privilegedSetFieldValue("SPIRBF", 1);
             } catch (Exception e) {
                 messageHandler.outputMessage("Failed to write request byte: " + e);
             }
