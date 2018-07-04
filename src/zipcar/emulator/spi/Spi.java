@@ -7,12 +7,18 @@ import com.microchip.mplab.mdbcore.simulator.scl.SCL;
 import com.microchip.mplab.mdbcore.simulator.MessageHandler;
 import com.microchip.mplab.mdbcore.simulator.SimulatorDataStore.SimulatorDataStore;
 import com.microchip.mplab.mdbcore.simulator.PeripheralSet;
+import java.io.BufferedInputStream;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.util.LinkedList;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.net.Socket;
 import org.openide.util.lookup.ServiceProvider;
 import java.util.Map;
 import org.yaml.snakeyaml.Yaml;
@@ -37,8 +43,8 @@ public class Spi implements Peripheral {
     SFRSet sfrs;
 
     LinkedList<Byte> bytes = new LinkedList<Byte>();
-    FileOutputStream request;
-    FileInputStream response;
+    BufferedWriter request;
+    BufferedInputStream response;
     Yaml yaml = new Yaml();
 
     int updateCounter = 0;
@@ -47,6 +53,9 @@ public class Spi implements Peripheral {
     long lastRead;
     long lastSent;
     boolean sendFlag = false;
+    boolean injectedFlag = false;
+    boolean systemBooted = false;
+    String tempStr = "";
     
     @Override
     public boolean init(SimulatorDataStore DS) {
@@ -82,13 +91,22 @@ public class Spi implements Peripheral {
         }
 
         // Setup pipes
-        try {
+        /* try {
             request = new FileOutputStream(REQUEST_FILE);
             response = new FileInputStream(RESPONSE_FILE);
         } catch (FileNotFoundException e) {
             messageHandler.outputMessage("Exception in init: " + e);
             return false;
-        }
+        } */
+        
+        // Setup Sockets
+        try {
+            Socket reqSocket = new Socket("localhost", 5555);
+            request = new BufferedWriter(new OutputStreamWriter(reqSocket.getOutputStream()));
+            response = new BufferedInputStream(reqSocket.getInputStream());
+        } catch (Exception e) {
+            messageHandler.outputError(e);
+        } 
 
         // Add observers
         SpiObserver obs = new SpiObserver();
@@ -135,18 +153,27 @@ public class Spi implements Peripheral {
 
     @Override
     public void update() {
-        if (cycleCount % (267) == 0) {
-            try {
-                if (response.available() >= 2) { // If there are unread bytes, read them and add to bytes array
-                    String tempStr = "";
-                    tempStr += (char) response.read();
-                    tempStr += (char) response.read();
-                    bytes.add((byte) Integer.parseInt(tempStr, 16));
+        if (cycleCount > 100000) {
+            systemBooted = true;
+        }
+        try {
+            if (sendFlag) {
+                injectedFlag = true;
+                sendFlag = false;
+                long readByte = response.read();
+                byte b = (byte) readByte;
+                if ((int) b == -1) {
+                    messageHandler.outputMessage("End of Stream");
+                    System.exit(0);
+                } else {
+                    messageHandler.outputMessage(String.format("Injecting: 0x%02X ", b)); // Returns the next char which will be injected
+                    sfrBuff.privilegedWrite(b); // Inject the next char
+                    sfrStat.privilegedSetFieldValue("SPIRBF", 1);
                 }
-            } catch (IOException e) {
-                messageHandler.outputMessage("Exception reading character from res " + e);
-                return;
             }
+        } catch (IOException e) {
+            messageHandler.outputMessage("Exception reading character from res " + e);
+            return;
         }
         cycleCount++;
     }
@@ -161,25 +188,20 @@ public class Spi implements Peripheral {
 
     // Try to write bytes to the request file
     public void output() {
-        try {
-            lastRead = sfrBuff.read();
-            request.write((byte) lastRead);
-            if (sendFlag) {
-                sendFlag = false;
-            } else {
-                messageHandler.outputMessage(String.format("Reading from SPI: 0x%02X", lastRead));
-                sfrStat.privilegedSetFieldValue("SPIRBF", 1);
-            }
-            if (!bytes.isEmpty()) { // Inject anything in chars
-                if (lastRead == 85) { // If the buffer is ready to recieve (sent a x55 byte) !! IMPORTANT
+        if (systemBooted) {
+            try {
+                if (injectedFlag) {
+                    injectedFlag = false;
+                } else {
+                    lastRead = sfrBuff.read();
+                    messageHandler.outputMessage(String.format("Reading from SPI: 0x%02X", lastRead));
+                    request.write((byte) lastRead);
+                    request.flush();
                     sendFlag = true;
-                    // messageHandler.outputMessage(String.format("Injecting: 0x%02X ", bytes.peek())); // Returns the next char which will be injected
-                    lastSent = bytes.pop();
-                    sfrBuff.privilegedWrite(lastSent); // Inject the next char
                 }
+            } catch (Exception e) {
+                messageHandler.outputMessage("Failed to write request byte: " + e);
             }
-        } catch (Exception e) {
-            messageHandler.outputMessage("Failed to write request byte: " + e);
         }
     }
 
