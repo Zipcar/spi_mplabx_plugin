@@ -8,6 +8,7 @@ import com.microchip.mplab.mdbcore.simulator.MessageHandler;
 import com.microchip.mplab.mdbcore.simulator.SimulatorDataStore.SimulatorDataStore;
 import com.microchip.mplab.mdbcore.simulator.PeripheralSet;
 import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -43,7 +44,7 @@ public class Spi implements Peripheral {
     SFRSet sfrs;
 
     LinkedList<Byte> bytes = new LinkedList<Byte>();
-    BufferedWriter request;
+    BufferedOutputStream request;
     BufferedInputStream response;
     Yaml yaml = new Yaml();
 
@@ -102,7 +103,7 @@ public class Spi implements Peripheral {
         // Setup Sockets
         try {
             Socket reqSocket = new Socket("localhost", 5555);
-            request = new BufferedWriter(new OutputStreamWriter(reqSocket.getOutputStream()));
+            request = new BufferedOutputStream(reqSocket.getOutputStream());
             response = new BufferedInputStream(reqSocket.getInputStream());
         } catch (Exception e) {
             messageHandler.outputError(e);
