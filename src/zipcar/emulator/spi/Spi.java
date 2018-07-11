@@ -30,8 +30,6 @@ public class Spi implements Peripheral {
     String SPI_NUM; // SPI Name (eg: SPI1, SPI2, etc...)
     String SPI_BUFF; // Respective SPI BUFFER SFR
     String SPI_STAT; // SPI STAT buffer
-    String REQUEST_FILE; // Request File Path (eg: "~/uartfolder/req"
-    String RESPONSE_FILE; // Response File Path (eg: "~/uartfolder/res"
 
     static Spi instance;
     SimulatorDataStore DS;
@@ -41,7 +39,7 @@ public class Spi implements Peripheral {
     SFR sfrBuff;
     SFR sfrStat;
     SFR sfrTX;
-    SFRSet sfrs;
+    SpiObserver spiMonitor;
 
     LinkedList<Byte> bytes = new LinkedList<Byte>();
     BufferedOutputStream request;
@@ -57,28 +55,43 @@ public class Spi implements Peripheral {
     boolean injectedFlag = false;
     boolean systemBooted = false;
     String tempStr = "";
+    FileInputStream conf;
+    Map config;
     
+    public Spi() {
+        spiMonitor = new SpiObserver();
+        yaml = new Yaml();
+    }
+
     @Override
     public boolean init(SimulatorDataStore DS) {
-        // Initialize DS
         this.DS = DS;
-
-        // Initialize messageHandler
+        SFRSet sfrs;
         messageHandler = DS.getMessageHandler();
 
         // Initialize instance variables
         try {
-            FileInputStream conf = new FileInputStream(new File("spiconfig.yml"));
-            Map config = (Map) yaml.load(conf);
+            conf = new FileInputStream(new File("spiconfig.yml"));
+            config = (Map) yaml.load(conf);
             SPI_NUM = config.get("spiNum").toString();
             SPI_BUFF = config.get("spiBuff").toString();
             SPI_STAT = config.get("spiStat").toString();
-            REQUEST_FILE = config.get("requestFile").toString();
-            RESPONSE_FILE = config.get("responseFile").toString();
-        } catch (Exception e) {
+        } catch (FileNotFoundException e) {
             messageHandler.outputError(e);
-            // return false;
+            messageHandler.outputMessage("Are you sure you placed config.yml in the correct folder?");
+            return false;
+        } catch (SecurityException e) {
+            messageHandler.outputErorr(e);
+            return false;
+        } catch (NullPointerException e) {
+            messageHandler.outputError(e);
+            messageHandler.outputMessage("Are you sure you have all of the necessary config fields?");
+            return false;
+        } catch (ClassCastException e) {
+            messageHandler.outputError(e);
+            return false;
         }
+
         sfrs = DS.getSFRSet();
         sfrBuff = sfrs.getSFR(SPI_BUFF);
         sfrStat = sfrs.getSFR(SPI_STAT);
@@ -90,32 +103,16 @@ public class Spi implements Peripheral {
             spiPeriph.deInit();
             periphSet.removePeripheral(spiPeriph);
         }
-
-        // Setup pipes
-        /* try {
-            request = new FileOutputStream(REQUEST_FILE);
-            response = new FileInputStream(RESPONSE_FILE);
-        } catch (FileNotFoundException e) {
-            messageHandler.outputMessage("Exception in init: " + e);
-            return false;
-        } */
         
         // Setup Sockets
-        try {
-            Socket reqSocket = new Socket("localhost", 5555);
-            request = new BufferedOutputStream(reqSocket.getOutputStream());
-            response = new BufferedInputStream(reqSocket.getInputStream());
-        } catch (Exception e) {
-            messageHandler.outputError(e);
-        } 
+        openSockets();
 
         // Add observers
         SpiObserver obs = new SpiObserver();
-        sfrBuff.addObserver(obs);
+        sfrBuff.addObserver(spiMonitor);
 
         messageHandler.outputMessage("External Peripheral Initialized: SPI");
-        instance = this;
-
+    
         // Add peripheral to list and return true
         DS.getPeripheralSet().addToActivePeripheralList(this);
         return true;
@@ -154,6 +151,9 @@ public class Spi implements Peripheral {
 
     @Override
     public void update() {
+        if (spiMonitor.changed()) {
+            output();
+        }
         if (cycleCount > 100000) {
             systemBooted = true;
         }
@@ -206,7 +206,31 @@ public class Spi implements Peripheral {
         }
     }
 
-    public static Spi get() {
-        return instance;
+    public void openSockets() {
+        try {
+            Socket reqSocket = new Socket("localhost", 5556);
+        } catch (IOException e) {
+            messageHandler.outputError(e);
+            messageHandler.outputMessage("Failed to open socket. Is there an external listener running?");
+            return false;
+        } catch (SecurityException e) {
+            messageHandler.outputError(e);
+            return false;
+        } catch (IllegalArgumentException e) {
+            messageHandler.outputError(e);
+            messageHandler.outputMessage("Provided port is outside of valid values (0-65535).");
+            return false;
+        } catch (NullPointerException e) {
+            messageHandler.outputError(e);
+            return false;
+        }
+
+        try {
+            request = new BufferedOutputStream(reqSocket.getOutputStream());
+            response = new BufferedInputStream(reqSocket.getInputStream());
+        } catch (IOException e) {
+            messageHandler.outputError(e);
+            messageHandler.outputMessage("Failed to open Req/Res streams.");
+        }
     }
 }

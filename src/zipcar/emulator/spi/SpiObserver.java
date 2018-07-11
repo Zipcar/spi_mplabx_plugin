@@ -14,12 +14,22 @@ import com.microchip.mplab.mdbcore.simulator.SFR;
  */
 public class SpiObserver implements SFRObserver {
 
+    boolean hasChanged = false;
+
     @Override
     public void update(SFR generator, SFRObserver.SFREvent event, SFRObserver.SFREventSource source) {
 
         if (event == SFRObserver.SFREvent.SFR_CHANGED) {
-            Spi.get().output();
+            hasChanged = true;
         }
 
     }
+
+    // Sets hasChanged to false and returns previous state
+    public boolean changed() {
+        boolean tempHasChanged = hasChanged;
+        hasChanged = false;
+        return tempHasChanged;
+    }
+    
 }
