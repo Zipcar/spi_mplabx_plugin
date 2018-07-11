@@ -9,16 +9,11 @@ import com.microchip.mplab.mdbcore.simulator.SimulatorDataStore.SimulatorDataSto
 import com.microchip.mplab.mdbcore.simulator.PeripheralSet;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
 import java.util.LinkedList;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
 import java.net.Socket;
 import org.openide.util.lookup.ServiceProvider;
 import java.util.Map;
@@ -42,6 +37,7 @@ public class Spi implements Peripheral {
     SpiObserver spiMonitor;
 
     LinkedList<Byte> bytes = new LinkedList<Byte>();
+    Socket reqSocket;
     BufferedOutputStream request;
     BufferedInputStream response;
     Yaml yaml = new Yaml();
@@ -81,7 +77,7 @@ public class Spi implements Peripheral {
             messageHandler.outputMessage("Are you sure you placed config.yml in the correct folder?");
             return false;
         } catch (SecurityException e) {
-            messageHandler.outputErorr(e);
+            messageHandler.outputError(e);
             return false;
         } catch (NullPointerException e) {
             messageHandler.outputError(e);
@@ -209,7 +205,7 @@ public class Spi implements Peripheral {
 
     public boolean openSockets() {
         try {
-            Socket reqSocket = new Socket("localhost", 5556);
+            reqSocket = new Socket("localhost", 5556);
         } catch (IOException e) {
             messageHandler.outputError(e);
             messageHandler.outputMessage("Failed to open socket. Is there an external listener running?");
