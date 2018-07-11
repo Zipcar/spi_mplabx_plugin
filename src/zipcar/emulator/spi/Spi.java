@@ -159,10 +159,9 @@ public class Spi implements Peripheral {
             if (sendFlag) {
                 injectedFlag = true;
                 sendFlag = false;
-                bytes = new byte[] {0};
-                int numberOfBytes = response.read(bytes, 0, 1);
-                byte b = bytes[0];
-                if (numberOfBytes == -1) {
+                int readByte = response.read();
+                byte b = (byte) readByte;
+                if (readByte == -1) {
                     messageHandler.outputMessage("End of Stream");
                     System.exit(0);
                 } else {
