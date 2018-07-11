@@ -110,7 +110,6 @@ public class Spi implements Peripheral {
         }
 
         // Add observers
-        SpiObserver obs = new SpiObserver();
         sfrBuff.addObserver(spiMonitor);
 
         messageHandler.outputMessage("External Peripheral Initialized: SPI");
