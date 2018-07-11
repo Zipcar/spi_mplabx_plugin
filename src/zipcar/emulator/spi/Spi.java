@@ -148,6 +148,7 @@ public class Spi implements Peripheral {
 
     @Override
     public void update() {
+        byte[] bytes;
         if (spiMonitor.changed()) {
             output();
         }
@@ -158,9 +159,10 @@ public class Spi implements Peripheral {
             if (sendFlag) {
                 injectedFlag = true;
                 sendFlag = false;
-                long readByte = response.read();
-                byte b = (byte) readByte;
-                if ((int) b == -1) {
+                bytes = new byte[] {0};
+                int numberOfBytes = response.read(bytes, 0, 1);
+                byte b = bytes[0];
+                if (numberOfBytes == -1) {
                     messageHandler.outputMessage("End of Stream");
                     System.exit(0);
                 } else {
