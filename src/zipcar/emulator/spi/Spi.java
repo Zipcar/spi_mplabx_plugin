@@ -205,7 +205,7 @@ public class Spi implements Peripheral {
 
     public boolean openSockets() {
         try {
-            reqSocket = new Socket("localhost", 5556);
+            reqSocket = new Socket("localhost", 5555);
         } catch (IOException e) {
             messageHandler.outputError(e);
             messageHandler.outputMessage("Failed to open socket. Is there an external listener running?");
