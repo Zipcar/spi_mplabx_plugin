@@ -105,7 +105,9 @@ public class Spi implements Peripheral {
         }
         
         // Setup Sockets
-        openSockets();
+        if (!openSockets()) {
+            return false;
+        }
 
         // Add observers
         SpiObserver obs = new SpiObserver();
@@ -206,7 +208,7 @@ public class Spi implements Peripheral {
         }
     }
 
-    public void openSockets() {
+    public boolean openSockets() {
         try {
             Socket reqSocket = new Socket("localhost", 5556);
         } catch (IOException e) {
@@ -231,6 +233,8 @@ public class Spi implements Peripheral {
         } catch (IOException e) {
             messageHandler.outputError(e);
             messageHandler.outputMessage("Failed to open Req/Res streams.");
+            return false;
         }
+        return true;
     }
 }
