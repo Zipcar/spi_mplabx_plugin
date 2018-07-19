@@ -162,8 +162,8 @@ public class Spi implements Peripheral {
                 int readByte = response.read();
                 byte b = (byte) readByte;
                 if (readByte == -1) {
-                    messageHandler.outputMessage("End of Stream");
-                    System.exit(0);
+                    messageHandler.outputMessage("Reached end of stream, reopening sockets...");
+                    openSockets();
                 } else {
                     messageHandler.outputMessage(String.format("Injecting: 0x%02X ", b)); // Returns the next char which will be injected
                     sfrBuff.privilegedWrite(b); // Inject the next char
